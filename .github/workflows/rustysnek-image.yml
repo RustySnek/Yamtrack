@@ -1,0 +1,103 @@
+name: RustySnek Image
+
+# Fork-only build: pushes an arm64 image to this fork's own GHCR package on
+# every master push. Upstream's docker-image.yml is left alone so pulling in
+# upstream changes never conflicts here.
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - "master"
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build:
+    # Native arm64 runner: the image builds a uv virtualenv from source, which
+    # takes tens of minutes under QEMU. If this label is ever unavailable
+    # (private repo without the larger-runner plan), switch to ubuntu-latest and
+    # add `uses: docker/setup-qemu-action@v4` before the buildx step.
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # tags, so `git describe` can name the version
+
+      - name: Get version from git
+        id: get-version
+        run: |
+          VERSION=$(git describe --tags 2>/dev/null || echo "master")
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "Using version: $VERSION"
+
+      - name: Setup Docker buildx
+        uses: docker/setup-buildx-action@v4
+
+      # metadata-action lowercases the image name, which ghcr requires and
+      # ${{ github.repository }} (RustySnek/Yamtrack) does not satisfy on its own.
+      - name: Extract Docker metadata tags
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest
+            type=sha,format=long
+            type=raw,value=${{ steps.get-version.outputs.VERSION }}
+
+      - name: Log into registry ${{ env.REGISTRY }}
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: false
+          platforms: linux/arm64
+          build-args: |
+            VERSION=${{ steps.get-version.outputs.VERSION }}
+
+      # The deployed host pulls :latest, so fail loudly here rather than at
+      # `systemctl start yamtrack-update` time.
+      - name: Verify the pushed image runs
+        run: |
+          docker network create yamtrack-verify
+          docker run -d --name yamtrack-redis --network yamtrack-verify redis:8-alpine
+          docker run -d --name yamtrack --network yamtrack-verify \
+            -e TZ=UTC \
+            -e SECRET=github-actions-verify-secret \
+            -e REDIS_URL=redis://yamtrack-redis:6379 \
+            -p 8000:8000 \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          for _ in $(seq 1 60); do
+            STATUS=$(docker inspect --format '{{.State.Health.Status}}' yamtrack)
+            if [ "$STATUS" = "healthy" ]; then
+              echo "Container is healthy"
+              exit 0
+            fi
+            if [ "$(docker inspect --format '{{.State.Running}}' yamtrack)" != "true" ]; then
+              echo "::error::Container exited before becoming healthy"
+              docker logs yamtrack
+              exit 1
+            fi
+            sleep 5
+          done
+          echo "::error::Container did not become healthy in time"
+          docker logs yamtrack
+          exit 1
