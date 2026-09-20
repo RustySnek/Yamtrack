@@ -304,6 +304,24 @@ class User(AbstractUser):
         choices=MediaStatusChoices,
     )
 
+    # Media type preferences: Events
+    event_enabled = models.BooleanField(default=True)
+    event_layout = models.CharField(
+        max_length=20,
+        default=LayoutChoices.GRID,
+        choices=LayoutChoices,
+    )
+    event_sort = models.CharField(
+        max_length=20,
+        default=MediaSortChoices.SCORE,
+        choices=MediaSortChoices,
+    )
+    event_status = models.CharField(
+        max_length=20,
+        default=MediaStatusChoices.ALL,
+        choices=MediaStatusChoices,
+    )
+
     # UI preferences
     clickable_media_cards = models.BooleanField(
         default=False,

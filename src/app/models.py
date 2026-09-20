@@ -62,6 +62,7 @@ class MediaTypes(models.TextChoices):
     BOOK = "book", "Book"
     COMIC = "comic", "Comic"
     BOARDGAME = "boardgame", "Boardgame"
+    EVENT = "event", "Event"
 
 
 class Item(CalendarTriggerMixin, models.Model):
@@ -1929,5 +1930,26 @@ class Comic(Media):
 
 class BoardGame(Media):
     """Model for board games."""
+
+    tracker = FieldTracker()
+
+
+class Event(Media):
+    """Model for generic events.
+
+    A catch-all type for anything the other media types do not cover: a
+    concert, a convention, a trip, a course. Entries are always manual, so
+    there is no provider metadata behind them and `progress` counts how many
+    times the event happened.
+    """
+
+    # `events.Event` (calendar releases) already owns Item's default
+    # `event_set` accessor, so this one is renamed rather than renaming the
+    # calendar model's, which would touch existing queries.
+    item = models.ForeignKey(
+        Item,
+        on_delete=models.CASCADE,
+        related_name="tracked_event_set",
+    )
 
     tracker = FieldTracker()

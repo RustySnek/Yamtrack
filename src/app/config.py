@@ -60,6 +60,11 @@ COLORS = {
         "background": "bg-lime-400",
         "hex": "#84cc16",
     },
+    "teal": {
+        "text": "text-teal-400",
+        "background": "bg-teal-400",
+        "hex": "#2dd4bf",
+    },
     "sky": {
         "text": "text-sky-400",
         "background": "bg-sky-400",
@@ -224,6 +229,29 @@ MEDIA_TYPE_CONFIG = {
         "unit": ("#", "Play"),
         "date_key": "year",
     },
+    MediaTypes.EVENT.value: {
+        # Generic catch-all type with no provider behind it: every entry is
+        # created by hand from /create.
+        "sources": [Sources.MANUAL],
+        "default_source": Sources.MANUAL,
+        "unicode_icon": "📅",
+        "verb": ("attend", "attended"),
+        "text_color": COLORS["teal"]["text"],
+        "stats_color": COLORS["teal"]["hex"],
+        "svg_icon": """
+            <path d="M8 2v4"/>
+            <path d="M16 2v4"/>
+            <rect width="18" height="18" x="3" y="4" rx="2"/>
+            <path d="M3 10h18"/>
+            <path d="M8 14h.01"/>
+            <path d="M12 14h.01"/>
+            <path d="M16 14h.01"/>""",
+        "unit": ("#", "Occurrence"),
+        # Manual items carry no provider metadata, so nothing supplies a
+        # release date. None keeps the calendar's `date_key in details` lookup
+        # falsy instead of raising a KeyError for a missing property.
+        "date_key": None,
+    },
 }
 
 # --- Status Configuration ---
@@ -321,6 +349,15 @@ def get_sample_search_url(media_type):
     base_url = reverse("search")
     query_params = {"media_type": media_type, "q": query}
     return f"{base_url}?{urlencode(query_params)}"
+
+
+def is_manual_only(media_type):
+    """Return whether a media type can only be created by hand.
+
+    Manual-only types have no provider to query, so they are kept out of the
+    search UI and their empty states point at the create page instead.
+    """
+    return get_sources(media_type) == [Sources.MANUAL]
 
 
 def get_unicode_icon(media_type):

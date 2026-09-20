@@ -11,6 +11,7 @@ from app.models import (
     Book,
     Comic,
     Episode,
+    Event,
     Game,
     Item,
     Manga,
@@ -327,6 +328,20 @@ class BoardgameForm(MediaForm):
             "progress": (
                 "Progress "
                 f"({config.get_unit(MediaTypes.BOARDGAME.value, short=False)}s)"
+            ),
+        }
+
+
+class EventForm(MediaForm):
+    """Form for generic events."""
+
+    class Meta(MediaForm.Meta):
+        """Bind form to model."""
+
+        model = Event
+        labels = {
+            "progress": (
+                f"Progress ({config.get_unit(MediaTypes.EVENT.value, short=False)}s)"
             ),
         }
 

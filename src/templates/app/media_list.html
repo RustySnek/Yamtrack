@@ -149,10 +149,17 @@
             <p class="text-gray-400 mb-6">
               Start tracking your {{ media_type_plural }} to keep a record of what you've {{ media_type|media_past_verb }}.
             </p>
-            <a href="{{ media_type|sample_search }}"
-               class="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors">
-              Browse {{ media_type|media_type_readable_plural }}
-            </a>
+            {% if media_type|manual_only %}
+              <a href="{% url 'create_entry' %}"
+                 class="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors">
+                Create {{ media_type|media_type_readable }}
+              </a>
+            {% else %}
+              <a href="{{ media_type|sample_search }}"
+                 class="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors">
+                Browse {{ media_type|media_type_readable_plural }}
+              </a>
+            {% endif %}
           {% endif %}
         </div>
       </div>

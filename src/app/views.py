@@ -282,6 +282,12 @@ def media_search(request):
         "last_search_type",
         request.GET["media_type"],
     )
+    # Manual-only types (events) have no provider behind them, so there is
+    # nothing to query: send the user to the create form instead of raising a
+    # KeyError out of services.search.
+    if config.is_manual_only(media_type):
+        return redirect("create_entry")
+
     query = request.GET["q"]
     page = int(request.GET.get("page", 1))
     layout = request.GET.get("layout", "grid")

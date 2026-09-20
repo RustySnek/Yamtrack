@@ -175,6 +175,12 @@ def sample_search(media_type):
 
 
 @register.filter
+def manual_only(media_type):
+    """Return whether the media type can only be created by hand."""
+    return config.is_manual_only(media_type)
+
+
+@register.filter
 def short_unit(media_type):
     """Return the short unit for the media type."""
     return config.get_unit(media_type, short=True)
@@ -197,7 +203,8 @@ def get_search_media_types(user):
     """Return available media types for search based on user preferences."""
     enabled_types = user.get_enabled_media_types()
 
-    # Filter and format the types for search
+    # Filter and format the types for search. Manual-only types (events) have
+    # no provider to search, so they are only reachable from /create.
     return [
         {
             "display": media_type_readable_plural(media_type),
@@ -205,6 +212,7 @@ def get_search_media_types(user):
         }
         for media_type in enabled_types
         if media_type != MediaTypes.SEASON.value
+        and not config.is_manual_only(media_type)
     ]
 
 
