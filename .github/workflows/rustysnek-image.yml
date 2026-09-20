@@ -11,7 +11,6 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
   build:
@@ -30,6 +29,13 @@ jobs:
         with:
           fetch-depth: 0 # tags, so `git describe` can name the version
 
+      # ghcr rejects uppercase, and ${{ github.repository }} is RustySnek/Yamtrack.
+      # metadata-action lowercases the tags it emits, but anything building an
+      # image reference by hand has to do it itself.
+      - name: Lowercase the image name
+        id: image
+        run: echo "NAME=${GITHUB_REPOSITORY,,}" >> $GITHUB_OUTPUT
+
       - name: Get version from git
         id: get-version
         run: |
@@ -40,13 +46,11 @@ jobs:
       - name: Setup Docker buildx
         uses: docker/setup-buildx-action@v4
 
-      # metadata-action lowercases the image name, which ghcr requires and
-      # ${{ github.repository }} (RustySnek/Yamtrack) does not satisfy on its own.
       - name: Extract Docker metadata tags
         id: meta
         uses: docker/metadata-action@v6
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          images: ${{ env.REGISTRY }}/${{ steps.image.outputs.NAME }}
           tags: |
             type=raw,value=latest
             type=sha,format=long
@@ -84,7 +88,7 @@ jobs:
             -e SECRET=github-actions-verify-secret \
             -e REDIS_URL=redis://yamtrack-redis:6379 \
             -p 8000:8000 \
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+            ${{ env.REGISTRY }}/${{ steps.image.outputs.NAME }}:latest
           for _ in $(seq 1 60); do
             STATUS=$(docker inspect --format '{{.State.Health.Status}}' yamtrack)
             if [ "$STATUS" = "healthy" ]; then
