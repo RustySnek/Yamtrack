@@ -7,6 +7,7 @@ from django.utils import timezone
 from app.models import (
     TV,
     Episode,
+    Event,
     Item,
     MediaTypes,
     Movie,
@@ -63,6 +64,64 @@ class CreateEntryViewTests(TestCase):
         self.assertEqual(movie.score, 8)
         self.assertEqual(movie.progress, 1)
         self.assertEqual(movie.user, self.user)
+
+    def test_create_entry_post_event(self):
+        """Test creating a generic event entry."""
+        form_data = {
+            "title": "Primavera Sound",
+            "media_type": MediaTypes.EVENT.value,
+            "status": Status.COMPLETED.value,
+            "score": 9,
+            "progress": 3,
+            "image": "https://example.com/poster.gif",
+            "start_date": "2023-06-01T00:00",
+            "end_date": "2023-06-04T00:00",
+        }
+
+        response = self.client.post(reverse("create_entry"), form_data, follow=True)
+
+        self.assertRedirects(response, reverse("create_entry"))
+
+        item = Item.objects.get(
+            title="Primavera Sound",
+            media_type=MediaTypes.EVENT.value,
+        )
+        # Generic events are never provider-backed
+        self.assertEqual(item.source, Sources.MANUAL.value)
+        self.assertEqual(item.image, "https://example.com/poster.gif")
+
+        event = Event.objects.get(item=item)
+        self.assertEqual(event.status, Status.COMPLETED.value)
+        self.assertEqual(event.score, 9)
+        self.assertEqual(event.progress, 3)
+        self.assertEqual(event.user, self.user)
+
+    def test_event_media_list_is_reachable(self):
+        """A tracked event shows up on its own media list page."""
+        item = Item.objects.create(
+            media_id="event-1",
+            source=Sources.MANUAL.value,
+            media_type=MediaTypes.EVENT.value,
+            title="Some Conference",
+            image="https://example.com/conf.png",
+        )
+        Event.objects.create(item=item, user=self.user, status=Status.COMPLETED.value)
+
+        response = self.client.get(
+            reverse("medialist", args=[self.user.username, MediaTypes.EVENT.value]),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Some Conference")
+
+    def test_event_search_redirects_to_create(self):
+        """Searching a manual-only type sends the user to the create form."""
+        response = self.client.get(
+            reverse("search"),
+            {"media_type": MediaTypes.EVENT.value, "q": "anything"},
+        )
+
+        self.assertRedirects(response, reverse("create_entry"))
 
     def test_create_entry_post_tv(self):
         """Test creating a TV show entry."""

@@ -3,6 +3,7 @@ import logging
 from django.db.models import Exists, OuterRef, Q, Subquery
 from django.utils import timezone
 
+from app import config
 from app.models import Item, MediaTypes, Sources
 from app.providers import services, tmdb
 from events.models import Event
@@ -12,10 +13,15 @@ logger = logging.getLogger(__name__)
 
 def get_items_to_process(user=None):
     """Get items to process for the calendar."""
+    # Manual-only types (events) are excluded along with the season/episode
+    # children: they have no provider to fetch releases from, and their reverse
+    # accessor is deliberately not called `event` -- that name belongs to the
+    # calendar Event model used in the filters further down.
     media_types = [
         choice.value
         for choice in MediaTypes
         if choice not in [MediaTypes.SEASON, MediaTypes.EPISODE]
+        and not config.is_manual_only(choice.value)
     ]
 
     query = Q()

@@ -1,5 +1,6 @@
 from unittest.mock import MagicMock, patch
 
+from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
@@ -166,11 +167,29 @@ class AppTagsTests(TestCase):
                 # Skip season and episode for sample_search
                 continue
 
+            if app_tags.manual_only(media_type):
+                # Manual-only types have no provider to search
+                continue
+
             result = app_tags.sample_search(media_type)
 
             self.assertIn("/search", result)
             self.assertIn(f"media_type={media_type}", result)
             self.assertIn("q=", result)
+
+    def test_manual_only_types_are_not_searchable(self):
+        """Manual-only types are kept out of the search type picker."""
+        user = get_user_model().objects.create_user(
+            username="search-types",
+            password="12345",  # noqa: S106
+        )
+
+        searchable = [entry["value"] for entry in app_tags.get_search_media_types(user)]
+
+        self.assertIn(MediaTypes.MOVIE.value, searchable)
+        self.assertNotIn(MediaTypes.EVENT.value, searchable)
+        self.assertTrue(app_tags.manual_only(MediaTypes.EVENT.value))
+        self.assertFalse(app_tags.manual_only(MediaTypes.MOVIE.value))
 
     def test_media_color(self):
         """Test the media_color filter."""

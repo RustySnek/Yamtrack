@@ -98,6 +98,7 @@ class EventManager(models.Manager):
             media_type
             for media_type in enabled_types
             if media_type not in [MediaTypes.TV.value, MediaTypes.SEASON.value]
+            and not config.is_manual_only(media_type)
         ]
 
         # Build base query for non-TV media types

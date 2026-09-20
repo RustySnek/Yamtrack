@@ -1,0 +1,185 @@
+{% extends "base.html" %}
+{% load app_tags %}
+
+{% block title %}
+  Poster - Yamtrack
+{% endblock title %}
+
+{% block content %}
+  <div class="mb-8">
+    <h1 class="text-3xl font-bold mb-2">Poster</h1>
+    <p class="text-gray-400">
+      Build a collage from the artwork of what you tracked. Tile sizes follow the statistic you pick, over the range you pick.
+    </p>
+  </div>
+
+  <div class="grid gap-6 lg:grid-cols-[22rem_1fr] items-start">
+    <form method="get"
+          class="bg-[#2a2f35] rounded-lg p-6 space-y-6"
+          x-data="{ gapStyle: '{{ selected_gap_style }}', allTime: {% if all_time %}true{% else %}false{% endif %}, seed: {{ seed }} }">
+      <div>
+        <label class="block text-sm font-medium mb-2 text-gray-300">Range</label>
+        <label class="flex items-center gap-2 text-sm text-gray-300 mb-3">
+          <input type="checkbox"
+                 x-model="allTime"
+                 class="rounded border-gray-600 bg-[#39404b] text-indigo-600">
+          All time
+        </label>
+        {# Disabled rather than hidden: x-show leaves the inputs in the form, and
+           an empty start-date submitted alongside "all time" used to win and
+           narrow the poster back down to the last year. #}
+        <div class="grid grid-cols-2 gap-3" x-show="!allTime" x-cloak>
+          <div>
+            <span class="block text-xs text-gray-400 mb-1">From</span>
+            <input type="date"
+                   name="start-date"
+                   value="{{ start_date|date:'Y-m-d' }}"
+                   :disabled="allTime"
+                   class="w-full px-3 py-2 bg-[#39404b] border border-gray-600 rounded-md text-white text-sm">
+          </div>
+          <div>
+            <span class="block text-xs text-gray-400 mb-1">To</span>
+            <input type="date"
+                   name="end-date"
+                   value="{{ end_date|date:'Y-m-d' }}"
+                   :disabled="allTime"
+                   class="w-full px-3 py-2 bg-[#39404b] border border-gray-600 rounded-md text-white text-sm">
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <label for="statistic"
+               class="block text-sm font-medium mb-2 text-gray-300">Size tiles by</label>
+        <select id="statistic"
+                name="statistic"
+                class="w-full px-3 py-2 bg-[#39404b] border border-gray-600 rounded-md text-white text-sm">
+          {% for value, label in statistics %}
+            <option value="{{ value }}"
+                    {% if value == selected_statistic %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div>
+        <span class="block text-sm font-medium mb-2 text-gray-300">Media types</span>
+        <div class="grid grid-cols-2 gap-2">
+          {% for media_type in media_types %}
+            <label class="flex items-center gap-2 text-sm text-gray-300">
+              <input type="checkbox"
+                     name="media_type"
+                     value="{{ media_type }}"
+                     {% if not selected_types or media_type in selected_types %}checked{% endif %}
+                     class="rounded border-gray-600 bg-[#39404b] text-indigo-600">
+              <span>{{ media_type|media_type_readable_plural }}</span>
+            </label>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div>
+        <span class="block text-sm font-medium mb-2 text-gray-300">Status</span>
+        <div class="grid grid-cols-2 gap-2">
+          {% for value, label in statuses %}
+            <label class="flex items-center gap-2 text-sm text-gray-300">
+              <input type="checkbox"
+                     name="status"
+                     value="{{ value }}"
+                     {% if value in selected_statuses %}checked{% endif %}
+                     class="rounded border-gray-600 bg-[#39404b] text-indigo-600">
+              <span>{{ label }}</span>
+            </label>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div>
+        <span class="block text-sm font-medium mb-2 text-gray-300">Gaps</span>
+        <select name="gap-style"
+                x-model="gapStyle"
+                class="w-full px-3 py-2 bg-[#39404b] border border-gray-600 rounded-md text-white text-sm">
+          {% for value, label in gap_styles %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+        </select>
+        <div class="mt-3" x-show="gapStyle !== 'none'" x-cloak>
+          <span class="block text-xs text-gray-400 mb-1">
+            Gap size (<span x-text="$refs.gap.value"></span>px)
+          </span>
+          <input type="range"
+                 name="gap"
+                 x-ref="gap"
+                 min="0"
+                 max="{{ max_gap }}"
+                 value="{{ gap }}"
+                 class="w-full accent-indigo-500">
+        </div>
+      </div>
+
+      <div>
+        <label for="limit" class="block text-sm font-medium mb-2 text-gray-300">Limit</label>
+        <input id="limit"
+               type="number"
+               name="limit"
+               value="{{ limit }}"
+               min="0"
+               step="10"
+               class="w-full px-3 py-2 bg-[#39404b] border border-gray-600 rounded-md text-white text-sm">
+        <p class="text-xs text-gray-500 mt-2">
+          0 draws everything in range. Any other number is split evenly between the
+          media types you ticked, so no single type crowds the others out.
+        </p>
+      </div>
+
+      <div>
+        <span class="block text-sm font-medium mb-2 text-gray-300">Shape</span>
+        {# The seed pins the silhouette so the preview and the download match. #}
+        <input type="hidden" name="seed" :value="seed">
+        <button type="submit"
+                @click="seed = Math.floor(Math.random() * 1000000)"
+                class="w-full px-4 py-2 bg-[#39404b] text-white rounded-md hover:bg-[#454d5a] transition-colors cursor-pointer">
+          Reshuffle shape
+        </button>
+        <p class="text-xs text-gray-500 mt-2">
+          Seed <span x-text="seed"></span> — the same seed always packs the same way.
+        </p>
+      </div>
+
+      <button type="submit"
+              class="w-full px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors cursor-pointer">
+        Generate
+      </button>
+      <p class="text-xs text-gray-500">
+        A range only covers entries that carry a start or end date; all time covers
+        everything. Entries missing the chosen statistic — an unscored game on a score
+        poster — are drawn at the smallest size rather than left out. Each one is shown
+        whole at full resolution on a transparent background, and artwork is fetched
+        from the original sources, so the first build of a large library takes a while.
+      </p>
+    </form>
+
+    {# The checkerboard makes the transparent background visible in the preview. #}
+    <div class="rounded-lg p-6"
+         style="background-color: #2a2f35;
+                background-image: linear-gradient(45deg, #23272b 25%, transparent 25%), linear-gradient(-45deg, #23272b 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #23272b 75%), linear-gradient(-45deg, transparent 75%, #23272b 75%);
+                background-size: 24px 24px;
+                background-position: 0 0, 0 12px, 12px -12px, -12px 0">
+      {% if has_result %}
+        <img src="{% url 'poster_image' %}?{{ image_params }}&preview=1"
+             alt="Generated poster"
+             class="w-full h-auto">
+        <a href="{% url 'poster_image' %}?{{ image_params }}&download=1"
+           class="inline-flex items-center gap-2 mt-4 px-4 py-2 bg-[#39404b] text-white rounded-md hover:bg-[#454d5a] transition-colors">
+          {% include "app/icons/download.svg" with classes="w-5 h-5" %}
+          Download full size
+        </a>
+      {% else %}
+        <div class="flex flex-col items-center justify-center py-16 text-center">
+          <div class="bg-[#39404b] rounded-full p-4 w-16 h-16 mb-4 flex items-center justify-center">
+            {% include "app/icons/image.svg" with classes="w-8 h-8 text-gray-400" %}
+          </div>
+          <h3 class="text-xl font-semibold mb-2">No poster yet</h3>
+          <p class="text-gray-400 max-w-sm">Pick a range and a statistic, then generate.</p>
+        </div>
+      {% endif %}
+    </div>
+  </div>
+{% endblock content %}

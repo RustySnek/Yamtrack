@@ -1,3 +1,4 @@
+import io
 import logging
 from pathlib import Path
 from urllib.parse import urlencode
@@ -18,6 +19,7 @@ from django.views.decorators.http import require_GET, require_http_methods, requ
 
 from app import config, helpers, history_processor
 from app import home as home_helpers
+from app import poster as poster_builder
 from app import statistics as stats
 from app.forms import EpisodeForm, ManualItemForm, get_form_class
 from app.models import (
@@ -1002,6 +1004,124 @@ def statistics(request):
     }
 
     return render(request, "app/statistics.html", context)
+
+
+def _poster_date_range(request):
+    """Return the poster's range, defaulting to all time.
+
+    The statistics range parser defaults to the last year, and its filtering
+    only matches entries carrying a start or end date -- so an undated but
+    completed entry would quietly never reach a poster. A poster nobody asked
+    to narrow should cover the whole library instead.
+    """
+    # Blank values count as absent: the form keeps its date inputs in the DOM
+    # while "all time" is ticked, and an empty string would otherwise fall
+    # through to the statistics default of "the last year".
+    if not request.GET.get("start-date") and not request.GET.get("end-date"):
+        return None, None
+    return stats.parse_activity_date_range(request)
+
+
+@require_GET
+def poster(request):
+    """Return the poster builder page."""
+    start_date, end_date = _poster_date_range(request)
+    selected_types = request.GET.getlist("media_type")
+
+    # The seed pins the layout, so the preview on this page and the full-size
+    # download render the same shape. A request without one gets a fresh seed,
+    # and re-submitting with a new seed reshuffles the silhouette.
+    seed = poster_builder.parse_seed(request.GET.get("seed"))
+    params = request.GET.copy()
+    params["seed"] = str(seed)
+    selected_statuses = poster_builder.parse_statuses(request.GET.getlist("status"))
+
+    context = {
+        "statistics": poster_builder.PosterStatistics.choices,
+        "gap_styles": poster_builder.GapStyles.choices,
+        "media_types": request.user.get_active_media_types(),
+        "selected_types": selected_types,
+        "statuses": Status.choices,
+        "selected_statuses": selected_statuses,
+        "selected_statistic": poster_builder.parse_statistic(
+            request.GET.get("statistic"),
+        ),
+        "selected_gap_style": poster_builder.parse_gap_style(
+            request.GET.get("gap-style"),
+        ),
+        "gap": poster_builder.parse_gap(request.GET.get("gap")),
+        "seed": seed,
+        "limit": poster_builder.parse_limit(request.GET.get("limit")),
+        "max_gap": poster_builder.MAX_GAP,
+        "start_date": start_date,
+        "end_date": end_date,
+        "all_time": start_date is None and end_date is None,
+        "image_params": params.urlencode(),
+        "has_result": bool(request.GET),
+    }
+
+    return render(request, "app/poster.html", context)
+
+
+@require_GET
+def poster_image(request):
+    """Return the generated poster as a transparent PNG.
+
+    Rendering is synchronous. Artwork is fetched in parallel and cached for a
+    week, so repeat builds are quick, but an unlimited poster over a large
+    library downloads one image per entry the first time and takes as long as
+    that needs -- the limit field is there to keep it short. The page asks for
+    ``preview=1`` to get a downscaled copy; everything else gets the full-size
+    render, whatever dimensions the packing produced.
+    """
+    start_date, end_date = _poster_date_range(request)
+
+    user_media = poster_builder.gather_media(
+        request.user,
+        poster_builder.parse_media_types(
+            request.GET.getlist("media_type"),
+            request.user.get_active_media_types(),
+        ),
+        poster_builder.parse_statuses(request.GET.getlist("status")),
+        start_date,
+        end_date,
+    )
+
+    statistic = poster_builder.parse_statistic(request.GET.get("statistic"))
+    tiles = poster_builder.collect_tiles(
+        user_media,
+        statistic,
+        limit=poster_builder.parse_limit(request.GET.get("limit")),
+    )
+
+    image = poster_builder.build_poster(
+        tiles,
+        gap=poster_builder.parse_gap(request.GET.get("gap")),
+        gap_style=poster_builder.parse_gap_style(request.GET.get("gap-style")),
+        seed=poster_builder.parse_seed(request.GET.get("seed")),
+    )
+    full_size = image.size
+
+    if request.GET.get("preview"):
+        image = poster_builder.preview(image)
+
+    buffer = io.BytesIO()
+    image.save(buffer, format="PNG", optimize=True)
+
+    logger.info(
+        "%s - Built a %s poster from %s items at %sx%s",
+        request.user,
+        statistic,
+        len(tiles),
+        *full_size,
+    )
+
+    response = HttpResponse(buffer.getvalue(), content_type="image/png")
+    response["X-Poster-Size"] = f"{full_size[0]}x{full_size[1]}"
+    if request.GET.get("download"):
+        filename = f"yamtrack-poster-{timezone.localdate()}.png"
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return response
 
 
 @require_GET

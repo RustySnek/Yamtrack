@@ -86,6 +86,8 @@ urlpatterns = [
         name="search_parent_season",
     ),
     path("statistics", views.statistics, name="statistics"),
+    path("poster", views.poster, name="poster"),
+    path("poster/image", views.poster_image, name="poster_image"),
     path("journal", views.journal, name="journal"),
     path("serviceworker.js", views.service_worker, name="service_worker"),
 ]
