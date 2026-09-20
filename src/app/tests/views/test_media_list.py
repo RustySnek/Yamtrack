@@ -169,15 +169,31 @@ class MediaListViewTests(TestCase):
 
         self.assertTrue(user.profile_private)
 
-    def test_private_media_list(self):
-        """Test the private media list view."""
+    def test_anonymous_user_cannot_view_private_media_list(self):
+        """Test anonymous users cannot view private media lists."""
+        self.client.logout()
+
         response = self.client.get(
             reverse(
                 "medialist", args=[self.external_user.username, MediaTypes.MOVIE.value]
             )
         )
+
         self.assertEqual(response.status_code, 404)
 
+    def test_authenticated_user_can_view_private_media_list(self):
+        """Test logged in users can view another user's private media list."""
+        response = self.client.get(
+            reverse(
+                "medialist", args=[self.external_user.username, MediaTypes.MOVIE.value]
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("media_list", response.context)
+
+    def test_profile_toggled_public_is_viewable(self):
+        """Test a profile switched to public stays viewable."""
         form = UserUpdateForm(
             data={"username": "test2", "profile_private": False},
             instance=self.external_user,

@@ -180,7 +180,9 @@ def media_list(request, username, media_type):
         )
     else:
         # privacy check then media type check
-        if target_user.profile_private:
+        # private profiles are hidden from anonymous visitors only; any logged
+        # in user can still view them
+        if target_user.profile_private and not request.user.is_authenticated:
             msg = "User not found"
             raise Http404(msg)
 
