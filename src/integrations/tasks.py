@@ -7,6 +7,7 @@ import events
 from app.mixins import disable_fetch_releases
 from app.models import MediaTypes
 from app.templatetags import app_tags
+from integrations import anilist_sync
 from integrations.imports import (
     anilist,
     goodreads,
@@ -157,3 +158,15 @@ def import_imdb(file, user_id, mode):
 def import_goodreads(file, user_id, mode):
     """Celery task for importing media data from GoodReads."""
     return import_media(goodreads.importer, file, user_id, mode)
+
+
+@shared_task(name="Sync to AniList")
+def sync_anilist(user_id, media_type, media_id):
+    """Celery task for pushing an anime or manga change to AniList."""
+    return anilist_sync.push(user_id, media_type, media_id)
+
+
+@shared_task(name="Retry failed AniList syncs")
+def retry_anilist_syncs(user_id=None):
+    """Celery task for retrying AniList pushes that previously failed."""
+    return anilist_sync.retry_failed(user_id)

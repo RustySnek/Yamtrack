@@ -590,6 +590,10 @@ CELERY_BEAT_SCHEDULE = {
         "task": "Cleanup user messages",
         "schedule": 60 * 60 * 24,  # every 24 hours
     },
+    "retry_anilist_syncs": {
+        "task": "Retry failed AniList syncs",
+        "schedule": 60 * 60,  # every hour
+    },
 }
 
 IS_PROD = not any(cmd in sys.argv for cmd in ("runserver", "test"))

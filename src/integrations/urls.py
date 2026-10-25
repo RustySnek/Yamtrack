@@ -29,6 +29,17 @@ urlpatterns = [
         views.import_anilist_public,
         name="import_anilist_public",
     ),
+    path(
+        "anilist/sync/connect",
+        views.anilist_sync_connect,
+        name="anilist_sync_connect",
+    ),
+    path(
+        "anilist/sync/disconnect",
+        views.anilist_sync_disconnect,
+        name="anilist_sync_disconnect",
+    ),
+    path("anilist/sync/retry", views.anilist_sync_retry, name="anilist_sync_retry"),
     path("import/kitsu", views.import_kitsu, name="import_kitsu"),
     path("import/yamtrack", views.import_yamtrack, name="import_yamtrack"),
     path("import/hltb", views.import_hltb, name="import_hltb"),

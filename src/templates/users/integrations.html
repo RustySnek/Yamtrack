@@ -53,6 +53,64 @@
     </div>
     <div class="bg-[#2a2f35] rounded-lg p-6">
       <div class="flex items-center mb-4">
+        {% include "app/icons/repeat.svg" with classes="w-6 h-6 text-indigo-400 mr-3" %}
+        <h2 class="text-xl font-semibold">AniList Sync</h2>
+      </div>
+      <p class="text-gray-400 mb-5 text-sm">
+        Push every anime and manga change you make here to your AniList list. Only MyAnimeList entries are synced, imports are not pushed, and failed pushes are retried every hour.
+      </p>
+      {% if user.anilist_connection %}
+        <div class="bg-[#39404b] p-4 rounded-md mb-4 flex items-center justify-between gap-4">
+          <div class="flex items-center text-sm text-gray-200">
+            {% include "app/icons/circle-check.svg" with classes="w-5 h-5 mr-2 text-emerald-400 shrink-0" %}
+            <p>
+              Connected as <span class="font-medium">{{ user.anilist_connection.username }}</span>
+              <span class="text-gray-400">since {{ user.anilist_connection.connected_at|date:"Y-m-d" }}</span>
+            </p>
+          </div>
+          <form method="post" action="{% url 'anilist_sync_disconnect' %}">
+            {% csrf_token %}
+            <button type="submit"
+                    class="flex items-center px-4 py-2 bg-[#2a2f35] text-gray-300 rounded-md hover:bg-red-600 hover:text-white transition-colors text-sm cursor-pointer">
+              {% include "app/icons/x.svg" with classes="w-4 h-4 mr-2" %}
+              Disconnect
+            </button>
+          </form>
+        </div>
+        {% with failures=user.anilist_sync_failures.all %}
+          {% if failures %}
+            <div class="bg-[#39404b] p-4 rounded-md flex items-center justify-between gap-4">
+              <div class="flex items-start text-sm text-amber-400 min-w-0">
+                {% include "app/icons/error.svg" with classes="w-4 h-4 mr-2 mt-0.5 shrink-0" %}
+                <div class="min-w-0">
+                  <p>{{ failures|length }} change{{ failures|length|pluralize }} failed to sync and will be retried.</p>
+                  <p class="text-xs text-gray-400 truncate" title="{{ failures.0.error }}">Last error: {{ failures.0.error }}</p>
+                </div>
+              </div>
+              <form method="post" action="{% url 'anilist_sync_retry' %}">
+                {% csrf_token %}
+                <button type="submit"
+                        class="flex items-center px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors text-sm cursor-pointer whitespace-nowrap">
+                  {% include "app/icons/circle-spinning-counter-clockwise.svg" with classes="w-4 h-4 mr-2" %}
+                  Retry now
+                </button>
+              </form>
+            </div>
+          {% endif %}
+        {% endwith %}
+      {% else %}
+        <form method="post" action="{% url 'anilist_sync_connect' %}">
+          {% csrf_token %}
+          <button type="submit"
+                  class="flex items-center px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors text-sm cursor-pointer">
+            {% include "app/icons/link.svg" with classes="w-4 h-4 mr-2" %}
+            Connect AniList
+          </button>
+        </form>
+      {% endif %}
+    </div>
+    <div class="bg-[#2a2f35] rounded-lg p-6">
+      <div class="flex items-center mb-4">
         {% include "app/icons/server.svg" with classes="w-6 h-6 text-indigo-400 mr-3" %}
         <h2 class="text-xl font-semibold">Media Servers</h2>
       </div>

@@ -18,8 +18,9 @@ from django.views.decorators.http import require_GET, require_POST
 
 import users
 from app import helpers as app_helpers
-from integrations import exports, tasks
+from integrations import anilist_sync, exports, tasks
 from integrations.imports import anilist, helpers, simkl, trakt
+from integrations.models import AniListConnection, AniListSyncFailure
 from integrations.webhooks import emby, jellyfin, plex
 
 logger = logging.getLogger(__name__)
@@ -278,6 +279,9 @@ def anilist_oauth(request):
 @require_GET
 def import_anilist_private(request):
     """View for getting the AniList OAuth2 token."""
+    if request.session.get(request.GET.get("state"), {}).get("anilist_sync"):
+        return anilist_sync_connected(request)
+
     oauth_callback = anilist.get_token(request)
     enc_token = helpers.encrypt(oauth_callback["access_token"])
     state_token = request.GET["state"]
@@ -310,6 +314,83 @@ def import_anilist_private(request):
             task_kwargs={"token": enc_token},
         )
     return redirect("import_data")
+
+
+@require_POST
+def anilist_sync_connect(request):
+    """Initiate AniList OAuth flow for pushing changes to AniList."""
+    if not settings.ANILIST_ID or not settings.ANILIST_SECRET:
+        messages.error(
+            request,
+            "AniList sync needs ANILIST_ID and ANILIST_SECRET to be configured.",
+        )
+        return redirect("integrations")
+
+    # An AniList client has a single redirect URL, so this shares the private
+    # import's callback, which tells the two apart by the state stored here.
+    redirect_uri = app_helpers.build_absolute_app_url(
+        request,
+        reverse("import_anilist_private"),
+    )
+    state_token = secrets.token_urlsafe(32)
+    request.session[state_token] = {"anilist_sync": True}
+
+    return redirect(
+        "https://anilist.co/api/v2/oauth/authorize?"
+        + urlencode(
+            {
+                "client_id": settings.ANILIST_ID,
+                "redirect_uri": redirect_uri,
+                "response_type": "code",
+                "state": state_token,
+            },
+        ),
+    )
+
+
+def anilist_sync_connected(request):
+    """Store the AniList token returned to the shared OAuth callback."""
+    del request.session[request.GET["state"]]
+
+    if "code" not in request.GET:
+        messages.error(request, "AniList authorization was cancelled.")
+        return redirect("integrations")
+
+    try:
+        oauth_callback = anilist.get_token(request)
+    except helpers.MediaImportError as error:
+        messages.error(request, str(error))
+        return redirect("integrations")
+
+    anilist_sync.connect(
+        request.user,
+        oauth_callback["access_token"],
+        oauth_callback["username"],
+    )
+    # Anything that failed under a previous, rejected token goes out now.
+    tasks.retry_anilist_syncs.delay(user_id=request.user.id)
+    messages.success(
+        request,
+        f"Connected to AniList as {oauth_callback['username']}.",
+    )
+    return redirect("integrations")
+
+
+@require_POST
+def anilist_sync_disconnect(request):
+    """Stop pushing changes to AniList and forget the token."""
+    AniListConnection.objects.filter(user=request.user).delete()
+    AniListSyncFailure.objects.filter(user=request.user).delete()
+    messages.info(request, "Disconnected from AniList.")
+    return redirect("integrations")
+
+
+@require_POST
+def anilist_sync_retry(request):
+    """Retry the user's failed AniList pushes now instead of on the hour."""
+    tasks.retry_anilist_syncs.delay(user_id=request.user.id)
+    messages.info(request, "Retrying failed AniList syncs.")
+    return redirect("integrations")
 
 
 @require_POST
